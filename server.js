@@ -37,6 +37,8 @@ const app = express();
 app.use(express.json(), cookieParser());
 app.use((req, res, n) => ready.then(() => n()).catch(e => res.status(500).json({ error: 'DB init failed: ' + e.message })));
 app.use(express.static(path.join(__dirname, 'public')));
+const findFile = (...names) => names.map(n => path.join(__dirname, n)).find(fs.existsSync);
+app.get('/', (req, res, next) => { const f = findFile('public/index.html', 'index.html'); f ? res.sendFile(f) : next(); });
 const wrap = f => (req, res) => f(req, res).catch(e => { console.error(e); res.status(500).json({ error: e.message }); });
 const auth = (...roles) => (req, res, next) => {
   try { const u = jwt.verify(req.cookies.t, SECRET); if (roles.length && u.role !== 'admin' && !roles.includes(u.role)) return res.status(403).json({ error: 'Forbidden' }); req.user = u; next(); }
@@ -225,7 +227,7 @@ app.get('/api/visits/:id/claim', auth('receptionist'), wrap(async (req, res) => 
   const d = claimData(v, f); d.case_code = (v.consult || {}).case_code; const miss = Object.keys(REQ).filter(k => !d[k]).map(k => REQ[k]);
   if (v.doc_name && !v.doc_reg) miss.push('Doctor registration number'); if (v.visit_type === 'Inpatient' && !d.accommodation) miss.push('Type of accommodation');
   if (miss.length && !req.query.force) return res.status(422).json({ missing: miss });
-  const pdf = await PDFDocument.load(fs.readFileSync(path.join(__dirname, 'forms', 'claim_form.pdf'))), font = await pdf.embedFont(StandardFonts.Helvetica), pages = pdf.getPages();
+  const pdf = await PDFDocument.load(fs.readFileSync(findFile('forms/claim_form.pdf', 'claim_form.pdf', 'SHA_HCPs_CLAIM_FORM-2024.pdf'))), font = await pdf.embedFont(StandardFonts.Helvetica), pages = pdf.getPages();
   const draw = (p, x, y, t, size = 9) => { const pg = pages[p], s = pg.getWidth() / 920; pg.drawText(String(t).toUpperCase(), { x: x * s, y: pg.getHeight() - y * s - 3, size, font }); };
   for (const c of COORDS.fields) {
     const val = d[c.k]; if (val === undefined || val === null || val === '') continue; if (c.eq && val !== c.eq) continue;
