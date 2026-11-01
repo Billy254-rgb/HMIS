@@ -28,7 +28,8 @@ async function init() {
   if (!(await q('select 1 from drugs limit 1')).length) for (const d of DRUGS.split(';')) { const [n, p] = d.split('|'); await q('insert into drugs(name,price,stock) values($1,$2,500)', [n, p]); }
   if (!(await q('select 1 from tests limit 1')).length) for (const t of TESTS.split(';')) { const [n, p, r] = t.split('|'); await q('insert into tests(name,price,ref) values($1,$2,$3)', [n, p, r]); }
 }
-const ready = init();
+const ready = url ? init() : Promise.reject(new Error('DATABASE_URL is not set. Add it in Render > Environment.'));
+ready.catch(e => console.error('DB init failed:', e.message));
 const settings = async () => Object.fromEntries((await q('select * from settings')).map(r => [r.key, r.value]));
 const log = (req, a) => q('insert into audit(user_name,action) values($1,$2)', [req.user?.username || '-', a]).catch(() => {});
 
