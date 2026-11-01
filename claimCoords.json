@@ -1,0 +1,17 @@
+{"fields":[
+{"k":"claim_no","p":0,"x":640,"y":516},{"k":"hpin","p":0,"x":465,"y":599},{"k":"facility","p":0,"x":380,"y":629},
+{"k":"last","p":0,"x":330,"y":722},{"k":"first","p":0,"x":330,"y":752},{"k":"middle","p":0,"x":330,"y":781},
+{"k":"member_no","p":0,"x":375,"y":810},{"k":"residence","p":0,"x":215,"y":840},{"k":"other_ins","p":0,"x":560,"y":870},{"k":"relationship","p":0,"x":345,"y":900},
+{"k":"ref_in_no","p":0,"x":290,"y":1001,"tick":1},{"k":"ref_in_name","p":0,"x":560,"y":1060},
+{"k":"visit_type","eq":"Inpatient","p":0,"x":218,"y":1120,"tick":1},{"k":"visit_type","eq":"Outpatient","p":0,"x":334,"y":1120,"tick":1},{"k":"visit_type","eq":"Day-care","p":0,"x":451,"y":1120,"tick":1},
+{"k":"adm_date","p":0,"x":130,"y":1175},{"k":"opip","p":0,"x":335,"y":1175},{"k":"new_return","p":0,"x":585,"y":1175},
+{"k":"dis_date","p":0,"x":130,"y":1232},{"k":"physician","p":0,"x":375,"y":1232,"max":55},
+{"k":"accommodation","p":1,"x":270,"y":182},
+{"k":"disposition","eq":"Improved","p":1,"x":316,"y":250,"tick":1},{"k":"disposition","eq":"Recovered","p":1,"x":316,"y":283,"tick":1},
+{"k":"disposition","eq":"Left Against Medical Advice","p":1,"x":576,"y":316,"tick":1},{"k":"disposition","eq":"Absconded","p":1,"x":316,"y":350,"tick":1},{"k":"disposition","eq":"Died","p":1,"x":261,"y":383,"tick":1},
+{"k":"ref_out_inst","p":1,"x":372,"y":456},{"k":"ref_out_reason","p":1,"x":325,"y":475},
+{"k":"adm_dx","p":1,"x":330,"y":497,"max":70},{"k":"dx","p":1,"x":295,"y":558,"max":70},{"k":"icd","p":1,"x":335,"y":588},
+{"k":"procedures","p":1,"x":430,"y":618},{"k":"proc_date","p":1,"x":340,"y":647},{"k":"unforeseen","p":1,"x":285,"y":1242,"max":60},
+{"k":"p_names","p":2,"x":245,"y":371},{"k":"amount","p":2,"x":168,"y":490},{"k":"today","p":2,"x":430,"y":545}
+],
+"table":{"p":1,"ys":[875,914,952,991,1029,1068,1106,1144],"xs":[125,220,310,365,475,580,660,733],"max":[10,10,8,16,20,10,9,9],"totalY":1182,"totalXs":[660,733]}}

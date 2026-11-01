@@ -1,0 +1,123 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HMIS</title>
+<style>
+:root{--p:#0f766e;--p2:#115e59;--bg:#f1f5f9;--c:#fff;--t:#0f172a;--m:#64748b;--b:#e2e8f0}
+@media(prefers-color-scheme:dark){:root{--bg:#0b1220;--c:#162033;--t:#e2e8f0;--m:#94a3b8;--b:#2a3750}}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--t)}
+header{background:var(--p);color:#fff;display:flex;gap:6px;align-items:center;padding:8px 14px;flex-wrap:wrap}header b{margin-right:12px;font-size:16px}
+header button{background:transparent;border:0;color:#fff;padding:8px 12px;border-radius:6px;cursor:pointer}header button.on,header button:hover{background:var(--p2)}
+main{padding:16px;max-width:1200px;margin:auto}.card{background:var(--c);border:1px solid var(--b);border-radius:10px;padding:14px;margin-bottom:14px}
+input,select,textarea{width:100%;padding:8px;border:1px solid var(--b);border-radius:6px;background:var(--c);color:var(--t);font:inherit}
+label{display:block;font-size:12px;color:var(--m)}button{background:var(--p);color:#fff;border:0;padding:8px 14px;border-radius:6px;cursor:pointer;font:inherit}button.s{background:var(--m)}button.d{background:#b91c1c}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}.bar{display:flex;gap:8px;margin-bottom:12px}.bar input{flex:1}
+table{width:100%;border-collapse:collapse}th,td{padding:7px;border-bottom:1px solid var(--b);text-align:left;vertical-align:top}th{font-size:12px;color:var(--m)}td button,td a{margin:2px}
+.warn{background:#fef3c7;color:#92400e;padding:8px 14px}#toast{position:fixed;bottom:16px;right:16px;background:#111;color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:9}
+.tag{padding:2px 8px;border-radius:99px;background:var(--b);font-size:12px}.wide{grid-column:1/-1}a{color:var(--p)}
+@media print{header,.bar{display:none}}
+</style></head><body><div id="app"></div><div id="toast"></div>
+<script>
+const SCH={'POMSF-SHA':['POMSF TSC','POMSF NPS'],Madison:['Amica Sacco','Muranga University of Technology']};
+const ACC=['','Female Medical','Male Medical','Female Surgical','Male Surgical','Gynaecology','Maternity','NBU','Psychiatric Unit','Burns','ICU','HDU','NICU','Isolation'];
+const DISP=['','Improved','Recovered','Left Against Medical Advice','Absconded','Died'];
+let U,CAT,M,cur=0,TABS=[];
+const h=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a)k.startsWith('on')?e[k]=a[k]:e.setAttribute(k,a[k]);c.flat().forEach(x=>e.append(x?.nodeType?x:String(x??'')));return e};
+const api=async(u,m='GET',b)=>{const r=await fetch('/api/'+u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.error||'Error');e.data=j;e.status=r.status;throw e}return j};
+const toast=t=>{const e=document.getElementById('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',3500)};
+const go=f=>async(...a)=>{try{await f(...a)}catch(e){toast(e.message)}};
+const deb=f=>{let t;return()=>{clearTimeout(t);t=setTimeout(f,250)}};
+const field=(n,l,t='text',o,v='')=>{let i;if(o)i=h('select',{name:n},...o.map(x=>{const a=Array.isArray(x)?x:[x,x];return h('option',{value:a[0]},a[1])}));else if(t=='area')i=h('textarea',{name:n,rows:2});else i=h('input',{name:n,type:t});i.value=v??'';return h('label',{},l,i)};
+const val=f=>Object.fromEntries([...f.elements].filter(e=>e.name).map(e=>[e.name,e.value]));
+const table=(hd,rows)=>h('table',{},h('tr',{},hd.map(x=>h('th',{},x))),rows.map(r=>h('tr',{},r.map(c=>h('td',{},c)))));
+const money=n=>'KES '+Number(n).toLocaleString();
+const show=async i=>{cur=i;[...document.querySelectorAll('header button.t')].forEach((b,j)=>b.classList.toggle('on',i==j));M.replaceChildren();await TABS[i][1](M)};
+const refresh=()=>go(()=>show(cur))();
+
+async function boot(){try{U=await api('me')}catch{return login()}CAT=await api('catalog');shell()}
+function login(){const f=h('form',{class:'card',style:'max-width:340px;margin:12vh auto',onsubmit:go(async e=>{e.preventDefault();await api('login','POST',val(f));boot()})},h('h2',{},'Hospital HMIS'),field('username','Username'),field('password','Password','password'),h('p'),h('button',{},'Sign in'));document.getElementById('app').replaceChildren(f)}
+function shell(){
+  const R={receptionist:[['Patients',rcPatients],['Direct Lab',m=>direct(m,'lab')],['Direct Pharmacy',m=>direct(m,'pharm')],['Discharge',rcDischarge]],nurse:[['Triage',triage]],doctor:[['Consultation',docQueue]],lab:[['Lab',m=>orders(m,'lab')]],pharmacy:[['Pharmacy',m=>orders(m,'drug')],['Stock',stock]]};
+  TABS=U.role=='admin'?[['Admin',admin],...Object.values(R).flat()]:R[U.role];M=h('main');
+  const hd=h('header',{},h('b',{},'HMIS'),TABS.map((t,i)=>h('button',{class:'t',onclick:()=>show(i)},t[0])),h('span',{style:'flex:1'}),h('span',{},U.name+' ('+U.role+')'),h('button',{onclick:go(async()=>{const p=prompt('New password (min 6 chars)');if(p){await api('password','POST',{password:p});toast('Password changed');boot()}})},'Password'),h('button',{onclick:go(async()=>{await api('logout','POST');login()})},'Logout'));
+  document.getElementById('app').replaceChildren(hd,U.weak?h('div',{class:'warn'},'Security: you are using the default password. Click "Password" to change it now.'):'',M);show(0)}
+
+// ---------- reception ----------
+function patForm(p,done){
+  const f=h('form',{class:'card g',onsubmit:go(async e=>{e.preventDefault();const d=val(f);done(p.id?await api('patients/'+p.id,'PUT',d):await api('patients','POST',d))})});
+  const A=(...a)=>a.forEach(x=>f.append(x));
+  A(field('last','Last name','text',0,p.last),field('first','First name','text',0,p.first),field('middle','Middle name','text',0,p.middle),field('sex','Sex','text',['Female','Male'],p.sex),field('dob','Date of birth','date',0,(p.dob||'').slice(0,10)),field('national_id','National ID / Birth cert no','text',0,p.national_id),field('phone','Phone','tel',0,p.phone),field('residence','Residence (county/sub-county/village)','text',0,p.residence),field('nok','Next of kin','text',0,p.nok),field('nok_phone','Next of kin phone','tel',0,p.nok_phone));
+  const payer=field('payer','Payer','text',['Cash','Insurance'],p.payer||'Cash'),ins=field('insurer','Insurer','text',['Cash'],p.insurer),sch=field('scheme','Scheme','text',['Cash'],p.scheme),pt=field('ptype','Patient type','text',['Self','Dependant'],p.ptype||'Self');
+  const sel=l=>l.querySelector('select'),fill=(s,o,v)=>{s.replaceChildren(...o.map(x=>h('option',{value:x},x)));s.value=o.includes(v)?v:o[0]};
+  const dep=h('div',{class:'g wide'},field('principal_name','Principal name','text',0,p.principal_name),field('principal_id','Principal ID','text',0,p.principal_id),field('relationship','Relationship to principal','text',['Spouse','Child','Parent','Other'],p.relationship));
+  const mem=h('div',{class:'g wide'},field('member_no','SHA / member number','text',0,p.member_no),field('other_ins','Other health insurance (name, or blank)','text',0,p.other_ins));
+  const sync=(init)=>{const c=sel(payer).value=='Cash';sel(ins).disabled=sel(sch).disabled=false;if(c){fill(sel(ins),['Cash']);fill(sel(sch),['Cash'])}else{const o=Object.keys(SCH);fill(sel(ins),o,init?p.insurer:sel(ins).value);fill(sel(sch),SCH[sel(ins).value],init?p.scheme:sel(sch).value)}mem.style.display=c?'none':'';dep.style.display=sel(pt).value=='Dependant'?'':'none'};
+  sel(payer).onchange=()=>sync();sel(ins).onchange=()=>{fill(sel(sch),SCH[sel(ins).value]||['Cash'])};sel(pt).onchange=()=>sync();
+  A(payer,ins,sch,pt,dep,mem,h('div',{class:'wide'},h('button',{},p.id?'Save changes':'Register patient'),' ',h('button',{type:'button',class:'s',onclick:()=>done(null)},'Cancel')));sync(true);return f}
+function rcPatients(m){
+  const s=h('input',{placeholder:'Search name, phone, ID, member no or patient no',oninput:deb(find)}),out=h('div');
+  m.append(h('div',{class:'bar'},s,h('button',{onclick:()=>formView({})},'+ New patient')),h('div',{class:'card'},out));
+  const formView=p=>{m.replaceChildren(patForm(p,r=>{if(r&&!p.id)visit(r);else show(0)}))};
+  const visit=p=>{const doc=h('select',{name:'doctor_id'}),f=h('form',{class:'card g',onsubmit:go(async e=>{e.preventDefault();const d=val(f);await api('visits','POST',{...d,patient_id:p.id,kind:'normal'});toast('Sent to triage');show(0)})},h('h3',{class:'wide'},'New visit: '+p.first+' '+p.last+' ('+p.payer+(p.insurer!='Cash'?' / '+p.insurer+' / '+p.scheme:'')+')'),h('label',{},'Doctor',doc),field('visit_type','Visit type','text',['Outpatient','Inpatient','Day-care']),field('preauth_no','Pre-authorisation no (optional)'),h('p',{class:'wide'},'Consultation fee KES '+FEE+' will be added automatically.'),h('div',{},h('button',{},'Send to triage'),' ',h('button',{type:'button',class:'s',onclick:()=>show(0)},'Cancel')));
+    api('doctors').then(d=>{doc.append(...d.map(x=>h('option',{value:x.id},x.name)));if(!d.length)toast('No doctors yet: ask admin to create one')});m.replaceChildren(f)};
+  async function find(){const r=await api('patients?q='+encodeURIComponent(s.value));out.replaceChildren(table(['No','Name','Phone','Payer','Scheme',''],r.map(p=>[p.patient_no,p.first+' '+p.last,p.phone,p.payer,p.scheme,h('span',{},h('button',{onclick:()=>visit(p)},'Start visit'),h('button',{class:'s',onclick:()=>formView(p)},'Edit'))])))}
+  find()}
+let FEE=1000;api('settings').then(s=>FEE=s.consult_fee).catch(()=>{});
+function direct(m,kind){
+  const lab=kind=='lab',list=lab?CAT.tests:CAT.drugs;let P=null;const qty={};
+  const s=h('input',{placeholder:'Search patient by name, phone, ID or member no',oninput:deb(find)}),res=h('div'),box=h('div'),tot=h('b',{},'KES 0');
+  const method=field('method','Payment method','text',['Cash','M-Pesa']),ref=field('ref','M-Pesa reference');
+  const pick=p=>{P=p;res.replaceChildren();s.value='';box.replaceChildren(h('h3',{},'Patient: '+p.first+' '+p.last+' ('+p.payer+')'),h('div',{class:'g'},method,ref),table(['Item','Price','Qty'],list.map(x=>[x.name,x.price,h('input',{type:'number',min:0,value:0,style:'width:70px',oninput:e=>{qty[x.id]=+e.target.value;tot.textContent=money(list.reduce((a,y)=>a+(qty[y.id]||0)*y.price,0))}})])),h('p',{},'Total ',tot),h('button',{onclick:go(async()=>{const items=Object.entries(qty).filter(a=>a[1]>0).map(a=>({type:lab?'lab':'drug',item_id:+a[0],qty:a[1]}));const v=await api('visits','POST',{patient_id:p.id,kind,items});if(v.patient_due>0)await api('visits/'+v.id+'/pay','POST',{amount:v.patient_due,method:val(box.querySelector('.g').closest('div')?{elements:[...box.querySelectorAll('select,input[name=ref]')]}:{}).method,ref:box.querySelector('input[name=ref]').value});toast('Sent to '+(lab?'lab':'pharmacy'));show(cur)})},'Create order & collect payment'))};
+  async function find(){const r=await api('patients?q='+encodeURIComponent(s.value));res.replaceChildren(...r.map(p=>h('div',{style:'padding:4px'},p.patient_no+' '+p.first+' '+p.last+' '+p.phone+' ',h('button',{onclick:()=>pick(p)},'Select'))))}
+  m.append(h('div',{class:'card'},h('h3',{},lab?'Direct lab service (no triage / doctor)':'Direct pharmacy sale (no triage / doctor)'),h('div',{class:'bar'},s,h('button',{class:'s',onclick:()=>{m.replaceChildren(patForm({},r=>{show(cur);if(r)toast('Registered '+r.patient_no+', now search and select')}))}},'Quick register')),res,box))}
+async function rcDischarge(m){
+  const doc=(v)=>h('span',{},h('a',{target:'_blank',href:'/api/visits/'+v.id+'/invoice'},'Invoice'),h('a',{target:'_blank',href:'/api/visits/'+v.id+'/case'},'Case summary'),v.insurer=='POMSF-SHA'?h('button',{class:'s',onclick:go(()=>claim(v.id))},'SHA claim form'):'');
+  const ready=await api('queue?stage=discharge'),done=await api('queue?stage=done');
+  m.append(h('div',{class:'card'},h('h3',{},'Ready for discharge'),table(['Visit','Patient','Payer','Total','Patient balance',''],ready.map(v=>[v.visit_no,v.name,v.payer+' '+v.insurer,money(v.total),money(v.balance),h('span',{},doc(v),v.balance>0?h('button',{onclick:go(async()=>{const a=prompt('Amount received',v.balance);if(!a)return;const me=prompt('Method: Cash or M-Pesa','Cash');await api('visits/'+v.id+'/pay','POST',{amount:a,method:me,ref:me=='M-Pesa'?prompt('M-Pesa reference'):''});refresh()})},'Take payment'):'',h('button',{onclick:go(async()=>{await api('visits/'+v.id+'/discharge','POST');refresh()})},'Discharge'))]))),h('div',{class:'card'},h('h3',{},'Discharged (last 3 days)'),table(['Visit','Patient','Total','Documents'],done.map(v=>[v.visit_no,v.name,money(v.total),doc(v)]))))}
+async function claim(id){try{await api('visits/'+id+'/claim')}catch(e){if(e.status==422){if(!confirm('The form requires all fields. Missing:\n- '+e.data.missing.join('\n- ')+'\n\nGenerate anyway?'))return}else if(e.status!=200&&e.data&&e.data.error&&e.status!=500){}}window.open('/api/visits/'+id+'/claim?force=1','_blank')}
+
+// ---------- nurse ----------
+async function triage(m){
+  const q=await api('queue?stage=triage'),docs=await api('doctors');
+  m.append(h('div',{class:'card'},h('h3',{},'Triage queue ('+q.length+')'),table(['Visit','Patient','Sex','Payer','Waiting since',''],q.map(v=>[v.visit_no,v.name,v.sex,v.payer,new Date(v.created_at).toLocaleTimeString(),h('button',{onclick:()=>open(v)},'Take vitals')]))));
+  function open(v){const V=v.vitals||{},f=h('form',{class:'card g',onsubmit:go(async e=>{e.preventDefault();const d=val(f),doc=d.doctor_id;delete d.doctor_id;if(+d.weight&&+d.height)d.bmi=(d.weight/Math.pow(d.height/100,2)).toFixed(1);await api('visits/'+v.id+'/vitals','PUT',{vitals:d,doctor_id:doc});toast('Sent to doctor');refresh()})},h('h3',{class:'wide'},v.name+' ('+v.patient_no+')'),
+    field('temperature','Temp (°C)','number',0,V.temperature),field('pulse','Pulse (bpm)','number',0,V.pulse),field('resp_rate','Resp rate','number',0,V.resp_rate),field('bp_sys','BP systolic','number',0,V.bp_sys),field('bp_dia','BP diastolic','number',0,V.bp_dia),field('spo2','SpO2 (%)','number',0,V.spo2),field('weight','Weight (kg)','number',0,V.weight),field('height','Height (cm)','number',0,V.height),field('rbs','RBS (mmol/L)','number',0,V.rbs),field('pain','Pain score 0-10','number',0,V.pain),field('lmp','LMP (females)','date',0,V.lmp),field('allergies','Allergies','text',0,V.allergies),field('priority','Priority','text',['Routine','Urgent','Emergency'],V.priority),field('complaint','Chief complaint','area',0,V.complaint),field('notes','Nursing notes','area',0,V.notes),
+    h('label',{},'Doctor',h('select',{name:'doctor_id'},...docs.map(d=>h('option',{value:d.id},d.name)))),h('div',{class:'wide'},h('button',{},'Save & send to doctor'),' ',h('button',{type:'button',class:'s',onclick:refresh},'Cancel')));f.doctor_id.value=v.doctor_id;m.replaceChildren(f)}}
+
+// ---------- doctor ----------
+async function docQueue(m){
+  const q=await api('queue?stage=doctor');
+  m.append(h('div',{class:'card'},h('h3',{},'Patients waiting ('+q.length+')'),table(['Visit','Patient','Priority','Complaint','Type',''],q.map(v=>[v.visit_no,v.name,h('span',{class:'tag'},(v.vitals||{}).priority||''),(v.vitals||{}).complaint||'',v.visit_type,h('button',{onclick:go(()=>consult(v.id))},'Open')]))));
+  const consult=async id=>{const v=await api('visits/'+id),c=v.consult||{},V=v.vitals||{};
+    const f=h('form',{class:'card g'}),save=async done=>{await api('visits/'+id+'/consult','PUT',{consult:val(f),complete:done});toast(done?'Consultation completed':'Saved')};
+    f.append(h('div',{class:'wide'},h('h3',{},v.name+' | '+v.sex+' | '+v.payer+' '+v.insurer),h('div',{},'Vitals: T '+V.temperature+'°C, P '+V.pulse+', BP '+V.bp_sys+'/'+V.bp_dia+', SpO2 '+V.spo2+'%, Wt '+V.weight+'kg, BMI '+V.bmi+', RBS '+V.rbs),h('div',{},'Allergies: '+(V.allergies||'none recorded')+' | Complaint: '+(V.complaint||'')),h('div',{},'Nurse notes: '+(V.notes||''))),
+      field('complaints','Presenting complaints','area',0,c.complaints),field('hpi','History of presenting illness','area',0,c.hpi),field('exam','Examination','area',0,c.exam),field('adm_dx','Admission diagnosis','area',0,c.adm_dx),field('dx','Discharge / final diagnosis','area',0,c.dx),field('icd','ICD-11 code(s)','text',0,c.icd),field('case_code','SHA case code','text',0,c.case_code),field('procedures','Related procedures','text',0,c.procedures),field('procedure_date','Date of procedure','date',0,c.procedure_date),
+      field('accommodation','Type of accommodation (inpatient)','text',ACC,c.accommodation),field('adm_date','Admission date','date',0,c.adm_date||new Date(v.created_at).toISOString().slice(0,10)),field('dis_date','Discharge date','date',0,c.dis_date||new Date().toISOString().slice(0,10)),field('referral_in','Referred in from (facility, blank if none)','text',0,c.referral_in),field('ref_out_inst','Referred out to (blank = N/A)','text',0,c.ref_out_inst),field('ref_out_reason','Reason for referral out','text',0,c.ref_out_reason),field('disposition','Disposition on discharge','text',DISP,c.disposition),field('unforeseen','Unforeseen circumstances / reason for prolonged stay','area',0,c.unforeseen),field('plan','Plan / follow-up date','area',0,c.plan),
+      h('div',{class:'wide'},h('button',{type:'button',class:'s',onclick:go(()=>save(false))},'Save draft'),' ',h('button',{type:'button',onclick:go(async()=>{await save(true);refresh()})},'Complete consultation'),' ',h('button',{type:'button',class:'s',onclick:refresh},'Back')));
+    const ord=h('div',{class:'card'});const draw=async()=>{const cv=await api('visits/'+id);const t=h('select'),it=h('select'),qty=h('input',{type:'number',value:1,min:1}),ins=h('input',{placeholder:'Dose, route, frequency, duration / urgency'});
+      const fillIt=()=>{it.replaceChildren(...(t.value=='lab'?CAT.tests:CAT.drugs).map(x=>h('option',{value:x.id},x.name+' - '+x.price)))};t.append(h('option',{value:'lab'},'Lab test'),h('option',{value:'drug'},'Drug'));t.onchange=fillIt;fillIt();
+      ord.replaceChildren(h('h3',{},'Orders (lab / pharmacy)'),h('div',{class:'g'},h('label',{},'Type',t),h('label',{},'Item',it),h('label',{},'Qty',qty),h('label',{},'Instructions',ins)),h('p',{},h('button',{onclick:go(async()=>{await api('visits/'+id+'/orders','POST',{type:t.value,item_id:+it.value,qty:+qty.value,instructions:ins.value});draw()})},'Send order'),' ',h('button',{class:'s',onclick:draw},'Refresh results')),table(['Type','Item','Qty','Instructions','Status','Result'],cv.orders.map(o=>[o.type,o.name,o.qty,o.instructions,o.status,o.result+' '+o.flag])))};
+    m.replaceChildren(f,ord);draw()}}
+
+// ---------- lab / pharmacy ----------
+async function orders(m,type){
+  const r=await api('orders?type='+type);
+  m.append(h('div',{class:'card'},h('h3',{},type=='lab'?'Lab orders':'Prescriptions'),table(['Visit','Patient','Source','Item','Qty','Instructions','Status','Action'],r.map(o=>{const res=h('input',{placeholder:'Result',value:o.result}),fl=h('select',{},...['','Normal','High','Low','Positive','Negative'].map(x=>h('option',{},x)));fl.value=o.flag;
+    const set=(status,extra)=>go(async()=>{await api('orders/'+o.id,'PUT',{status,...extra});refresh()});
+    const act=o.status=='done'?'Completed':h('span',{},o.status=='ordered'?h('button',{onclick:set('acknowledged')},'Acknowledge'):'',o.status=='acknowledged'?(type=='lab'?h('span',{},res,fl,h('button',{onclick:()=>set('done',{result:res.value,flag:fl.value})()},'Complete')):h('button',{onclick:set('done')},'Dispense')):'');
+    return [o.visit_no,o.pname,o.kind=='normal'?'Doctor':'Direct',o.name,o.qty,o.instructions,o.status,act]}))))}
+async function stock(m){const c=await api('catalog');m.append(catEditor('drugs',c.drugs,true))}
+function catEditor(t,rows,isDrug){
+  const box=h('div',{class:'card'}),nf=h('form',{class:'g',onsubmit:go(async e=>{e.preventDefault();await api('cat/'+t,'POST',val(nf));CAT=await api('catalog');refresh()})},field('name','Name'),field('price','Price (KES)','number'),isDrug?field('stock','Opening stock','number'):field('ref','Reference range'),h('div',{},h('button',{},'Add')));
+  box.append(h('h3',{},isDrug?'Drugs & stock (receive stock by editing quantity)':'Lab tests'),nf,table(['Name','Price','Stock/Ref','Active',''],rows.map(x=>{const p=h('input',{type:'number',value:x.price}),s=h('input',{value:isDrug?x.stock:x.ref}),a=h('select',{},h('option',{value:'true'},'Yes'),h('option',{value:'false'},'No'));a.value=String(x.active);
+    return [x.name,p,s,a,h('button',{onclick:go(async()=>{await api('cat/'+t+'/'+x.id,'PUT',{name:x.name,price:p.value,stock:s.value,ref:s.value,active:a.value});CAT=await api('catalog');toast('Saved')})},'Save')]})));return box}
+
+// ---------- admin ----------
+async function admin(m){
+  const users=await api('users'),st=await api('settings'),rep=await api('report'),au=await api('audit'),cat=await api('catalog');
+  const uf=h('form',{class:'g',onsubmit:go(async e=>{e.preventDefault();const d=val(uf),ex=users.find(u=>u.id==d.id);if(d.id)await api('users/'+d.id,'PUT',{...d,active:d.active});else await api('users','POST',d);refresh()})},h('input',{name:'id',type:'hidden'}),field('username','Username'),field('name','Full name'),field('role','Role','text',['receptionist','nurse','doctor','lab','pharmacy','admin']),field('reg_no','Registration no (doctors)'),field('password','Password (blank = keep)','password'),field('active','Active','text',['true','false']),h('div',{},h('button',{},'Save user')));
+  const sf=h('form',{class:'g',onsubmit:go(async e=>{e.preventDefault();await api('settings','PUT',val(sf));FEE=sf.consult_fee.value;toast('Settings saved')})},field('facility_name','Facility name','text',0,st.facility_name),field('hpin','HPIN','text',0,st.hpin),field('address','Address','text',0,st.address),field('phone','Phone','text',0,st.phone),field('consult_fee','Consultation fee (KES)','number',0,st.consult_fee),field('copay_pct','Insurance co-pay % (patient share)','number',0,st.copay_pct),h('div',{},h('button',{},'Save settings')));
+  m.append(h('div',{class:'card'},h('h3',{},'Users (click Edit to change or reset password)'),table(['User','Name','Role','Reg no','Active',''],users.map(u=>[u.username,u.name,u.role,u.reg_no,String(u.active),h('button',{class:'s',onclick:()=>{for(const k of ['id','username','name','role','reg_no','active'])uf[k].value=u[k];uf.username.disabled=true;scrollTo(0,0)}},'Edit')])),h('h4',{},'Add / edit user'),uf),
+    h('div',{class:'card'},h('h3',{},'Facility settings'),sf),
+    h('div',{class:'card'},h('h3',{},'Reports'),table(['Day','Method','Collected'],rep.revenue.map(r=>[r.day,r.method,money(r.total)])),table(['Payer','Insurer','Visits'],rep.visits.map(r=>[r.payer,r.insurer,r.n])),h('p',{},'SHA claims ready (discharged POMSF-SHA visits): '+rep.claims.n)),
+    catEditor('drugs',cat.drugs,true),catEditor('tests',cat.tests,false),
+    h('div',{class:'card'},h('h3',{},'Audit log (latest 100)'),table(['When','User','Action'],au.map(a=>[new Date(a.at).toLocaleString(),a.user_name,a.action]))))}
+boot();
+</script></body></html>
