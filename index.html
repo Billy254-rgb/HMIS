@@ -28,15 +28,15 @@ const field=(n,l,t='text',o,v='')=>{let i;if(o)i=h('select',{name:n},...o.map(x=
 const val=f=>Object.fromEntries([...f.elements].filter(e=>e.name).map(e=>[e.name,e.value]));
 const table=(hd,rows)=>h('table',{},h('tr',{},hd.map(x=>h('th',{},x))),rows.map(r=>h('tr',{},r.map(c=>h('td',{},c)))));
 const money=n=>'KES '+Number(n).toLocaleString();
-const show=async i=>{cur=i;[...document.querySelectorAll('header button.t')].forEach((b,j)=>b.classList.toggle('on',i==j));M.replaceChildren();await TABS[i][1](M)};
+const show=async i=>{cur=i;[...document.querySelectorAll('header button.t')].forEach((b,j)=>b.classList.toggle('on',i==j));M.replaceChildren();try{await TABS[i][1](M)}catch(e){M.append(h('div',{class:'card'},'Error: '+e.message))}};
 const refresh=()=>go(()=>show(cur))();
 
 async function boot(){try{U=await api('me')}catch{return login()}CAT=await api('catalog');shell()}
 function login(){const f=h('form',{class:'card',style:'max-width:340px;margin:12vh auto',onsubmit:go(async e=>{e.preventDefault();await api('login','POST',val(f));boot()})},h('h2',{},'Hospital HMIS'),field('username','Username'),field('password','Password','password'),h('p'),h('button',{},'Sign in'));document.getElementById('app').replaceChildren(f)}
 function shell(){
   const R={receptionist:[['Patients',rcPatients],['Direct Lab',m=>direct(m,'lab')],['Direct Pharmacy',m=>direct(m,'pharm')],['Discharge',rcDischarge]],nurse:[['Triage',triage]],doctor:[['Consultation',docQueue]],lab:[['Lab',m=>orders(m,'lab')]],pharmacy:[['Pharmacy',m=>orders(m,'drug')],['Stock',stock]]};
-  TABS=U.role=='admin'?[['Admin',admin],...Object.values(R).flat()]:R[U.role];M=h('main');
-  const hd=h('header',{},h('b',{},'HMIS'),TABS.map((t,i)=>h('button',{class:'t',onclick:()=>show(i)},t[0])),h('span',{style:'flex:1'}),h('span',{},U.name+' ('+U.role+')'),h('button',{onclick:go(async()=>{const p=prompt('New password (min 6 chars)');if(p){await api('password','POST',{password:p});toast('Password changed');boot()}})},'Password'),h('button',{onclick:go(async()=>{await api('logout','POST');login()})},'Logout'));
+  TABS=U.role=='admin'?[['Users',adminUsers],['Settings',adminSettings],['Catalogue',adminCatalogue],['Reports',adminReports],...Object.values(R).flat()]:R[U.role];M=h('main');
+  const hd=h('header',{},h('b',{},'HMIS'),TABS.map((t,i)=>h('button',{class:'t',onclick:()=>show(i)},t[0])),h('span',{style:'flex:1'}),h('span',{},U.name+' ('+U.role+')'),h('button',{onclick:go(async()=>{const p=prompt('New password (any password is allowed)');if(p){await api('password','POST',{password:p});toast('Password changed');boot()}})},'Password'),h('button',{onclick:go(async()=>{await api('logout','POST');login()})},'Logout'));
   document.getElementById('app').replaceChildren(hd,U.weak?h('div',{class:'warn'},'Security: you are using the default password. Click "Password" to change it now.'):'',M);show(0)}
 
 // ---------- reception ----------
@@ -110,14 +110,20 @@ function catEditor(t,rows,isDrug){
     return [x.name,p,s,a,h('button',{onclick:go(async()=>{await api('cat/'+t+'/'+x.id,'PUT',{name:x.name,price:p.value,stock:s.value,ref:s.value,active:a.value});CAT=await api('catalog');toast('Saved')})},'Save')]})));return box}
 
 // ---------- admin ----------
-async function admin(m){
-  const users=await api('users'),st=await api('settings'),rep=await api('report'),au=await api('audit'),cat=await api('catalog');
-  const uf=h('form',{class:'g',onsubmit:go(async e=>{e.preventDefault();const d=val(uf),ex=users.find(u=>u.id==d.id);if(d.id)await api('users/'+d.id,'PUT',{...d,active:d.active});else await api('users','POST',d);refresh()})},h('input',{name:'id',type:'hidden'}),field('username','Username'),field('name','Full name'),field('role','Role','text',['receptionist','nurse','doctor','lab','pharmacy','admin']),field('reg_no','Registration no (doctors)'),field('password','Password (blank = keep)','password'),field('active','Active','text',['true','false']),h('div',{},h('button',{},'Save user')));
-  const sf=h('form',{class:'g',onsubmit:go(async e=>{e.preventDefault();await api('settings','PUT',val(sf));FEE=sf.consult_fee.value;toast('Settings saved')})},field('facility_name','Facility name','text',0,st.facility_name),field('hpin','HPIN','text',0,st.hpin),field('address','Address','text',0,st.address),field('phone','Phone','text',0,st.phone),field('consult_fee','Consultation fee (KES)','number',0,st.consult_fee),field('copay_pct','Insurance co-pay % (patient share)','number',0,st.copay_pct),h('div',{},h('button',{},'Save settings')));
-  m.append(h('div',{class:'card'},h('h3',{},'Users (click Edit to change or reset password)'),table(['User','Name','Role','Reg no','Active',''],users.map(u=>[u.username,u.name,u.role,u.reg_no,String(u.active),h('button',{class:'s',onclick:()=>{for(const k of ['id','username','name','role','reg_no','active'])uf[k].value=u[k];uf.username.disabled=true;scrollTo(0,0)}},'Edit')])),h('h4',{},'Add / edit user'),uf),
-    h('div',{class:'card'},h('h3',{},'Facility settings'),sf),
-    h('div',{class:'card'},h('h3',{},'Reports'),table(['Day','Method','Collected'],rep.revenue.map(r=>[r.day,r.method,money(r.total)])),table(['Payer','Insurer','Visits'],rep.visits.map(r=>[r.payer,r.insurer,r.n])),h('p',{},'SHA claims ready (discharged POMSF-SHA visits): '+rep.claims.n)),
-    catEditor('drugs',cat.drugs,true),catEditor('tests',cat.tests,false),
+async function adminUsers(m){
+  const users=await api('users');
+  const uf=h('form',{class:'card g',onsubmit:go(async e=>{e.preventDefault();const d=val(uf);if(d.id)await api('users/'+d.id,'PUT',d);else await api('users','POST',d);toast('User saved');refresh()})},
+    h('h3',{class:'wide'},'Add or edit a user'),h('input',{name:'id',type:'hidden'}),field('username','Username'),field('name','Full name'),field('role','Role','text',['doctor','receptionist','nurse','lab','pharmacy','admin']),field('reg_no','Registration no (for doctors)'),field('password','Password (any password is allowed, e.g. 123; blank keeps the old one when editing)'),field('active','Active','text',['true','false']),
+    h('div',{class:'wide'},h('button',{},'Save user'),' ',h('button',{type:'button',class:'s',onclick:refresh},'Clear form')));
+  m.append(uf,h('div',{class:'card'},h('h3',{},'All users'),table(['Username','Name','Role','Reg no','Active',''],users.map(u=>[u.username,u.name,u.role,u.reg_no,String(u.active),h('button',{class:'s',onclick:()=>{for(const k of ['id','username','name','role','reg_no','active'])uf.elements[k].value=u[k];uf.elements.username.disabled=true;uf.elements.password.value='';uf.scrollIntoView()}},'Edit')]))))}
+async function adminSettings(m){
+  const st=await api('settings');
+  const sf=h('form',{class:'card g',onsubmit:go(async e=>{e.preventDefault();await api('settings','PUT',val(sf));FEE=sf.elements.consult_fee.value;toast('Settings saved')})},h('h3',{class:'wide'},'Facility settings'),field('facility_name','Facility name','text',0,st.facility_name),field('hpin','HPIN (Health Provider Identification Number)','text',0,st.hpin),field('address','Address','text',0,st.address),field('phone','Phone','text',0,st.phone),field('consult_fee','Consultation fee (KES)','number',0,st.consult_fee),field('copay_pct','Insurance co-pay % (patient share)','number',0,st.copay_pct),h('div',{class:'wide'},h('button',{},'Save settings')));
+  m.append(sf)}
+async function adminCatalogue(m){const c=await api('catalog');m.append(catEditor('drugs',c.drugs,true),catEditor('tests',c.tests,false))}
+async function adminReports(m){
+  const rep=await api('report'),au=await api('audit');
+  m.append(h('div',{class:'card'},h('h3',{},'Reports'),table(['Day','Method','Collected'],rep.revenue.map(r=>[r.day,r.method,money(r.total)])),table(['Payer','Insurer','Visits'],rep.visits.map(r=>[r.payer,r.insurer,r.n])),h('p',{},'SHA claims ready (discharged POMSF-SHA visits): '+rep.claims.n)),
     h('div',{class:'card'},h('h3',{},'Audit log (latest 100)'),table(['When','User','Action'],au.map(a=>[new Date(a.at).toLocaleString(),a.user_name,a.action]))))}
 boot();
 </script></body></html>

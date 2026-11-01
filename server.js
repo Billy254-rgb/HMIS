@@ -39,7 +39,7 @@ app.use((req, res, n) => ready.then(() => n()).catch(e => res.status(500).json({
 app.use(express.static(path.join(__dirname, 'public')));
 const findFile = (...names) => names.map(n => path.join(__dirname, n)).find(fs.existsSync);
 app.get('/', (req, res, next) => { const f = findFile('public/index.html', 'index.html'); f ? res.sendFile(f) : next(); });
-const wrap = f => (req, res) => f(req, res).catch(e => { console.error(e); res.status(500).json({ error: e.message }); });
+const wrap = f => (req, res) => f(req, res).catch(e => { console.error(e); if (e.code === '23505') return res.status(400).json({ error: 'That username already exists' }); res.status(500).json({ error: e.message }); });
 const auth = (...roles) => (req, res, next) => {
   try { const u = jwt.verify(req.cookies.t, SECRET); if (roles.length && u.role !== 'admin' && !roles.includes(u.role)) return res.status(403).json({ error: 'Forbidden' }); req.user = u; next(); }
   catch { res.status(401).json({ error: 'Login required' }); }
@@ -63,7 +63,7 @@ app.get('/api/me', auth(), wrap(async (req, res) => {
   res.json({ id: u.id, username: u.username, name: u.name, role: u.role, weak: bcrypt.compareSync('admin', u.password_hash) });
 }));
 app.post('/api/password', auth(), wrap(async (req, res) => {
-  if (!req.body.password || req.body.password.length < 6) return res.status(400).json({ error: 'Minimum 6 characters' });
+  if (!req.body.password) return res.status(400).json({ error: 'Type a password' });
   await q('update users set password_hash=$1 where id=$2', [bcrypt.hashSync(req.body.password, 10), req.user.id]); res.json({ ok: 1 });
 }));
 
